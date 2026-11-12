@@ -1,0 +1,10 @@
+require('dotenv').config();
+const express=require('express');const http=require('http');const path=require('path');const helmet=require('helmet');const cors=require('cors');const QRCode=require('qrcode');const {Server}=require('socket.io');const {initDb,leaderboard,recentMatches}=require('./store');const {attachSockets}=require('./socket');
+const app=express();const server=http.createServer(app);const io=new Server(server,{maxHttpBufferSize:2e6,cors:{origin:true,methods:['GET','POST']}});
+app.use(helmet({contentSecurityPolicy:false}));app.use(cors());app.use(express.json({limit:'2mb'}));app.use(express.static(path.join(__dirname,'../public')));initDb();attachSockets(io);
+app.get('/api/health',(_,res)=>res.json({ok:true,service:'draw-battle'}));
+app.get('/api/qr/:code',async(req,res)=>{if(!/^[A-F0-9]{6}$/.test(req.params.code))return res.status(400).json({error:'Invalid room code'});try{const base=(process.env.PUBLIC_URL||`${req.protocol}://${req.get('host')}`).replace(/\/$/,'');const data=await QRCode.toDataURL(`${base}/join.html?room=${req.params.code}`,{width:420,margin:2,errorCorrectionLevel:'M'});res.json({data});}catch(e){res.status(500).json({error:'QR generation failed'});}});
+app.get('/api/matches',async(_,res)=>{try{const rows=await recentMatches();if(!rows)return res.status(503).json({error:'Database belum dikonfigurasi.'});res.json({rows});}catch(e){console.error(e);res.status(500).json({error:'Gagal memuat riwayat.'});}});
+app.get('/api/leaderboard',async(_,res)=>{try{const rows=await leaderboard();if(!rows)return res.status(503).json({error:'Database belum dikonfigurasi. Leaderboard membutuhkan PostgreSQL.'});res.json({rows});}catch(e){console.error(e);res.status(500).json({error:'Gagal memuat leaderboard.'});}});
+app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'../public/index.html')));
+const port=Number(process.env.PORT)||3000;server.listen(port,'0.0.0.0',()=>console.log(`DRAW BATTLE running on http://localhost:${port}`));
